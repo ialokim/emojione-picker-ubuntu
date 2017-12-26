@@ -26,7 +26,7 @@ from gi.repository import GLib, Gtk, GObject, Gdk, Notify, GdkPixbuf
 from gi.repository import AppIndicator3 as appindicator
 
 # Where is the data?
-directories = [expanduser("~") + "/.local/share/emojione-picker", "/usr/local/share/emojione-picker", "/usr/share/emojione-picker", os.path.dirname(os.path.realpath(__file__))]
+directories = [expanduser("~") + "/.local/share/emojione-picker-dev", "/usr/local/share/emojione-picker-dev", "/usr/share/emojione-picker-dev", os.path.dirname(os.path.realpath(__file__))]
 for d in directories:
     if os.path.isdir(d):
         directory = d;
@@ -43,7 +43,7 @@ default_settings = settings = {
     "recent": 20,
     "paste": False
 }
-configpath = expanduser("~") + "/.config/emojione-picker"
+configpath = expanduser("~") + "/.config/emojione-picker-dev"
 os.path.isdir(configpath) or os.mkdir(configpath)
 
 sockname = '/tmp/emojisocket.' + str(os.getuid()) + os.environ['DISPLAY']
@@ -91,7 +91,7 @@ def apply_settings():
         "toned": builder.get_object("combo_toned").get_active()-1,
         "notifications": builder.get_object("check_notifications").get_active(),
         "lowend": builder.get_object("check_lowend").get_active(),
-	"recent": builder.get_object("recent").get_value_as_int(),
+        "recent": builder.get_object("recent").get_value_as_int(),
         "paste": builder.get_object("check_paste").get_active()
     }
     # Save settings to file
@@ -349,20 +349,20 @@ if __name__ == "__main__":
         GObject.threads_init()
 
         # Initialize notifications
-        Notify.init("emojione-picker")
+        Notify.init("emojione-picker-dev")
 
         # Create the main menu
         menu = Gtk.Menu()
 
         # Create indicator
-        ind = appindicator.Indicator.new("emojione-picker", directory + "/assets/icon-default.svg", appindicator.IndicatorCategory.APPLICATION_STATUS)
+        ind = appindicator.Indicator.new("emojione-picker-dev", directory + "/assets/icon-default.svg", appindicator.IndicatorCategory.APPLICATION_STATUS)
         ind.set_status(appindicator.IndicatorStatus.ACTIVE)
 
         # If there is a icon present in the theme, use it!
         try:
           icons = Gtk.IconTheme.get_default()
-          icon = icons.load_icon("emojione-picker", Gtk.IconSize.MENU, 0)
-          ind.set_icon("emojione-picker")
+          icon = icons.load_icon("emojione-picker-dev", Gtk.IconSize.MENU, 0)
+          ind.set_icon("emojione-picker-dev")
         except:
           pass
 

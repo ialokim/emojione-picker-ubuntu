@@ -1,8 +1,8 @@
 [Desktop Entry]
-Name=Emojione Picker
+Name=Emojione Picker Development
 Comment=Emoji Picker for Ubuntu
-Icon=emojione-picker
-Exec=emojione-picker
+Icon=emojione-picker-dev
+Exec=emojione-picker-dev
 Terminal=false
 Type=Application
 NoDisplay=false
@@ -10,3 +10,4 @@ X-GNOME-Autostart-enabled=true
 X-GNOME-Autostart-Delay=10
 
 
+Name[de_DE.utf8]=Emojione Picker Development

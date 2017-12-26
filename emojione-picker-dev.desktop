@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Emojione Picker Development
+Comment=Emoji Picker for Ubuntu
+Icon=emojione-picker-dev
+Exec=emojione-picker-dev
+Terminal=false
+Type=Application
+NoDisplay=false
+
+Name[de_DE.utf8]=Emojione Picker Development
