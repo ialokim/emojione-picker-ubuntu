@@ -131,7 +131,7 @@ def open_search_window(self, w):
         global sorted_recent, searchresults
         for i in sorted_recent:
             emoji_name = sorted_recent[i]["name"]
-            emoji_image = GdkPixbuf.Pixbuf.new_from_file_at_size(directory + "/assets/svg/" + sorted_recent[i]["unicode"] + ".svg", 24, 24)
+            emoji_image = get_emoji_pixbuf(sorted_recent[i], 24)
             emoji_code = sorted_recent[i]["unicode"]
             iconstore.append([emoji_image, emoji_code, emoji_name])
             searchresults = []
@@ -153,7 +153,7 @@ class SearchHandler:
             global sorted_recent
             for i in sorted_recent:
                 emoji_name = sorted_recent[i]["name"]
-                emoji_image = GdkPixbuf.Pixbuf.new_from_file_at_size(directory + "/assets/svg/" + sorted_recent[i]["unicode"] + ".svg", 24, 24)
+                emoji_image = get_emoji_pixbuf(sorted_recent[i], 24)
                 emoji_code = sorted_recent[i]["unicode"]
                 iconstore.append([emoji_image, emoji_code, emoji_name])
             searchresults = []
@@ -175,7 +175,7 @@ class SearchHandler:
                     return
                 searchresults.append(sorted_data[i])
                 emoji_name = sorted_data[i]["name"]
-                emoji_image = GdkPixbuf.Pixbuf.new_from_file_at_size(directory + "/assets/svg/" + sorted_data[i]["unicode"] + ".svg", 24, 24)
+                emoji_image = get_emoji_pixbuf(sorted_data[i], 24)
                 emoji_code = sorted_data[i]["unicode"]
                 iconstore.append([emoji_image, emoji_code, emoji_name])
     def onIconActivated(self, icon, index):
@@ -251,10 +251,10 @@ def refresh_recent_submenu():
     for key in sorted_recent:
         if i >= settings["recent"]:
             break
-        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(directory + "/assets/svg/" + sorted_recent[key]["unicode"] + ".svg", iconsizes[1], iconsizes[2])
+        pixbuf = get_emoji_pixbuf(sorted_recent[key])
         img = Gtk.Image.new_from_pixbuf(pixbuf)
         recent_items[i].set_image(img)
-        recent_items[i].set_label(sorted_recent[key]["name"].title())
+        recent_items[i].set_label(get_emoji_name(sorted_recent[key]).title())
         recent_items[i].show()
         if ("recent_" + str(i)) in signals.keys():
             recent_items[i].disconnect(signals["recent_" + str(i)])
@@ -264,13 +264,13 @@ def refresh_recent_submenu():
 # Type character using xdootool [Experimental]
 def type_xdotool(text):
     time.sleep(0.1)
-    subprocess.Popen(["xdotool", "type", text.decode('unicode-escape')])
+    subprocess.Popen(["xdotool", "type", text])
     return False # Glib.idle_add needs this
 
 # Click response
 def item_response(self, w):
     global recentindex, recent
-
+    
     # If this is a toned item with submenu, do nothing
     try:
         if self.get_submenu() != None:
@@ -279,26 +279,24 @@ def item_response(self, w):
         pass
 
     # Copy character to clipboard or write it
-    chars = w["unicode"].split("-")
-    output = ""
-    for char in chars:
-        output = output + '\\U' + (char.zfill(8))
+    output = w["emoji"]
+    
     if settings["paste"]==True:
         GLib.idle_add(type_xdotool,output)
     else:
         clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
-        GLib.idle_add(clipboard.set_text,output.decode('unicode-escape'), -1)
+        GLib.idle_add(clipboard.set_text,output, -1)
 
     # Show notification
     if settings["notifications"]==True:
         if settings["paste"]==False:
-            n = Notify.Notification.new(w["name"].title(), "Emoji is now in the clipboard. Paste it wherever you want!", directory + "/assets/svg/" + w["unicode"] + ".svg")
+            n = Notify.Notification.new(get_emoji_name(w).title(), "Emoji is now in the clipboard. Paste it wherever you want!", get_emoji_icon(w))
             n.show()
 
     # Remove item from recent if already present
     try:
         for k in recent.keys():
-            if recent[k]["emoji_order"] == w["emoji_order"]:
+            if recent[k]["order"] == w["order"]:
                 del recent[k]
     except ValueError:
         pass
@@ -306,7 +304,7 @@ def item_response(self, w):
     # Store item on recent
     w["recent_order"] = recentindex
     recentindex = recentindex + 1
-    recent.update({w["emoji_order"]:w})
+    recent.update({w["order"]:w})
 
     # Remove older items if recent is too big
     if len(recent) > settings["recent"]:
@@ -314,7 +312,7 @@ def item_response(self, w):
         for k in recent.keys():
             if recent[k]["recent_order"] > biggestindex:
                 biggestindex = recent[k]["recent_order"]
-	nextbiggest = biggestindex
+        nextbiggest = biggestindex
         for i in range (1, settings["recent"]):
             nextbiggest_candidate = 0
             for k in recent.keys():
@@ -338,6 +336,85 @@ def get_emoji_group(code):
         if code in groups_data[key]["unicodes"]:
             return key
     return False
+
+def get_emoji_name(emoji):
+    if "annotation" in emoji:
+        return emoji["annotation"]
+    return emoji["name"]
+    
+def get_emoji_icon(emoji):
+    return directory + "/assets/png/" + emoji["hexcode"].lower() + ".png"
+
+def get_emoji_pixbuf(emoji, size = None):
+    return get_icon_pixbuf(get_emoji_icon(emoji))
+    
+def fix_emoji_hexcode(emoji):
+    hexcodes = emoji["hexcode"].split('-')
+    if len(hexcodes) > 1:
+        hexcode = ""
+        for h in hexcodes:
+            if h != "200D" and h != "FE0F":
+                hexcode += "-" + h
+        emoji["hexcode"] = hexcode[1:]
+    return emoji
+
+def get_icon_pixbuf(path, size = None):
+    if size is None:
+        # Get proper icon sizes
+        size = Gtk.IconSize.lookup(Gtk.IconSize.MENU)[1]
+    return GdkPixbuf.Pixbuf.new_from_file_at_size(path, size, size)
+
+def build_emoji_item(emoji, name = None):
+    if name is None:
+		name = get_emoji_name(emoji)
+    
+    try:
+        pixbuf = get_emoji_pixbuf(emoji)
+        img = Gtk.Image.new_from_pixbuf(pixbuf)
+    except:
+        img = Gtk.Image()
+        print ("Icon for '%s' could not be found: %s" % (name, emoji["hexcode"]))
+    
+    return build_menu_item(name, img)
+
+def build_menu_item(name, img):
+    item = Gtk.ImageMenuItem(name.title())
+    item_settings = item.get_settings()
+    item_settings.set_property('gtk-menu-images', True)
+    GLib.idle_add(item.set_image, img)
+    GLib.idle_add(item.show)
+    return item
+    
+
+def build_group_menu(item):
+    menu = Gtk.Menu()
+    GLib.idle_add(item.set_submenu, menu)
+    return menu
+    
+def replace_subgroup_name(subgroup_name):
+    matrix = {
+        'cat-face': 'face-cat',
+        'monkey-face': 'face-monkey',
+        'sky-weather': 'sky & weather',
+        'award-medal': 'award medal',
+        'musical-instrument': 'music-instrument',
+        'light-video': 'light & video',
+        'book-paper': 'book & paper',
+        'other-object': 'other',
+        'transport-sign': 'transport sign',
+        'av-symbol': 'audio & video',
+        'other-symbol': 'other',
+        'flag': 'other',
+        'other-symbol': 'other',
+        'other-symbol': 'other',
+        'flag': 'misc',
+        'country-flag': 'country',
+        'subdivision-flag': 'country'
+    }
+    if subgroup_name in matrix:
+        return matrix[subgroup_name]
+    return subgroup_name
+        
 
 if __name__ == "__main__":
     try:
@@ -366,163 +443,147 @@ if __name__ == "__main__":
         except:
           pass
 
-        # Get proper icon sizes
-        iconsizes = Gtk.IconSize.lookup(Gtk.IconSize.MENU)
-        
-        # Create categories items and submenus
-        category_item = {}
-        category_menu = {}
-        for category in categories:
-            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(directory + "/assets/categories/" + category + ".svg", iconsizes[1], iconsizes[2])
-            img = Gtk.Image.new_from_pixbuf(pixbuf)
-            category_item[category] = Gtk.ImageMenuItem(category.title())
-            item_settings = category_item[category].get_settings()
-            item_settings.set_property('gtk-menu-images', True)
-            GLib.idle_add(category_item[category].set_image, img)
-            category_menu[category] = Gtk.Menu()
-            category_item[category].set_submenu(category_menu[category]);
-
         # Load groups and icons definition and rearrange them in order
         with open(directory + "/assets/groups.json") as groups_file:
             groups_data = json.load(groups_file)
         with open(directory + "/assets/emoji.json") as json_file:
             json_data = json.load(json_file)
-            def orderfunc(tup):
-                key, d = tup
-                return int(d["emoji_order"])
-            sorted_data = sorted(json_data.items(), key=orderfunc)
-            sorted_data = OrderedDict(sorted_data)
+            def orderfunc(d):
+                return int(d["order"])
+            sorted_data = sorted(json_data, key=orderfunc)
+        with open(directory + "/assets/subgroups.json") as subgroups_file:
+            subgroups_data = json.load(subgroups_file)
 
         # Load icons into menu items
-        tones_re = re.compile('(.*) tone[ ]?\d', re.IGNORECASE)
-        item_groups = {}
-        submenu_groups = {}
-        items = {}
-        tone_groups = {}
-        submenu_tones = {}
+        group_items = {}
+        group_menus = {}
         signals = {}
-        for category in categories:
-            for key in sorted_data:
-                if settings["lowend"] == False or not sorted_data[key]["unicode"] in lowend:
-                    if sorted_data[key]["category"] == category:
-                        emoji_group = get_emoji_group(sorted_data[key]["unicode"])
-                        if emoji_group != False:
-                            # Grouped emoji
-                            if not emoji_group in item_groups:
-                                # Create group item
-                                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(directory + "/assets/svg/" + groups_data[emoji_group]["icon"] + ".svg", iconsizes[1], iconsizes[2])
-                                img = Gtk.Image.new_from_pixbuf(pixbuf)
-                                item_groups[emoji_group] = Gtk.ImageMenuItem(groups_data[emoji_group]["name"].title())
-                                item_settings = item_groups[emoji_group].get_settings()
-                                item_settings.set_property('gtk-menu-images', True)
-                                GLib.idle_add(item_groups[emoji_group].set_image, img)
-                                GLib.idle_add(category_menu[category].append, item_groups[emoji_group])
-                                GLib.idle_add(item_groups[emoji_group].show)
-                                # Create group submenu
-                                submenu_groups[emoji_group] = Gtk.Menu()
-                                GLib.idle_add(item_groups[emoji_group].set_submenu, submenu_groups[emoji_group])
-                            if tones_re.match(sorted_data[key]["name"]) == None:
-                                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(directory + "/assets/svg/" + sorted_data[key]["unicode"] + ".svg", iconsizes[1], iconsizes[2])
-                                img = Gtk.Image.new_from_pixbuf(pixbuf)
-                                items[sorted_data[key]["unicode"]] = Gtk.ImageMenuItem(sorted_data[key]["name"].title())
-                                item_settings = items[sorted_data[key]["unicode"]].get_settings()
-                                item_settings.set_property('gtk-menu-images', True)
-                                GLib.idle_add(items[sorted_data[key]["unicode"]].set_image, img)
-                                GLib.idle_add(submenu_groups[emoji_group].append, items[sorted_data[key]["unicode"]])
-                                GLib.idle_add(items[sorted_data[key]["unicode"]].show)
-                                signals[key] = items[sorted_data[key]["unicode"]].connect("activate", item_response, sorted_data[key])
-                            else:
-                                # This won't happen, we are not grouping toned icons
-                                pass
-                        else:
-                            if tones_re.match(sorted_data[key]["name"]) == None: 
-                                # Not toned emoji (aka simplest case), just add to menu
-                                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(directory + "/assets/svg/" + sorted_data[key]["unicode"] + ".svg", iconsizes[1], iconsizes[2])
-                                img = Gtk.Image.new_from_pixbuf(pixbuf)
-                                items[sorted_data[key]["unicode"]] = Gtk.ImageMenuItem(sorted_data[key]["name"].title())
-                                item_settings = items[sorted_data[key]["unicode"]].get_settings()
-                                item_settings.set_property('gtk-menu-images', True)
-                                GLib.idle_add(items[sorted_data[key]["unicode"]].set_image, img)
-                                GLib.idle_add(category_menu[category].append, items[sorted_data[key]["unicode"]])
-                                GLib.idle_add(items[sorted_data[key]["unicode"]].show)
-                                signals[key] = items[sorted_data[key]["unicode"]].connect("activate", item_response, sorted_data[key])
-                            else:
-                                # Toned emoji
-                                if settings["toned"] == -1 and settings["lowend"] == False:
-                                    # Show all toned emojis in a submenu
-                                    original_key = key
-                                    chars = sorted_data[key]["unicode"].split("-")
-                                    tone_group = chars[0] # FIXME this can be multibyte so taking the first byt isn't right
-                                    if not tone_group in tone_groups:
-                                        # Create tone submenu
-                                        submenu_tones[tone_group] = Gtk.Menu()
-                                        GLib.idle_add(items[tone_group].set_submenu, submenu_tones[tone_group])
-                                        tone_groups[tone_group] = items[tone_group]
-                                        # Get key from original icon
-                                        for k in sorted_data:
-                                            if sorted_data[k]["unicode"] == tone_group:
-                                                key = k
-                                        # Append untoned icon to submenu
-                                        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(directory + "/assets/svg/" + sorted_data[key]["unicode"] + ".svg", iconsizes[1], iconsizes[2])
-                                        img = Gtk.Image.new_from_pixbuf(pixbuf)
-                                        items[sorted_data[key]["unicode"]] = Gtk.ImageMenuItem(sorted_data[key]["name"].title())
-                                        item_settings = items[tone_group].get_settings()
-                                        item_settings.set_property('gtk-menu-images', True)
-                                        GLib.idle_add(items[sorted_data[key]["unicode"]].set_image, img)
-                                        GLib.idle_add(submenu_tones[tone_group].append, items[sorted_data[key]["unicode"]])
-                                        GLib.idle_add(items[sorted_data[key]["unicode"]].show)
-                                        signals[key] = items[sorted_data[key]["unicode"]].connect("activate", item_response, sorted_data[key])
-                                    key = original_key
-                                    # Append toned emoji to toned submenu
-                                    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(directory + "/assets/svg/" + sorted_data[key]["unicode"] + ".svg", iconsizes[1], iconsizes[2])
-                                    img = Gtk.Image.new_from_pixbuf(pixbuf)
-                                    items[sorted_data[key]["unicode"]] = Gtk.ImageMenuItem(sorted_data[key]["name"].title())
-                                    item_settings = items[sorted_data[key]["unicode"]].get_settings()
-                                    item_settings.set_property('gtk-menu-images', True)
-                                    GLib.idle_add(items[sorted_data[key]["unicode"]].set_image, img)
-                                    GLib.idle_add(submenu_tones[tone_group].append, items[sorted_data[key]["unicode"]])
-                                    GLib.idle_add(items[sorted_data[key]["unicode"]].show)
-                                    signals[key] = items[sorted_data[key]["unicode"]].connect("activate", item_response, sorted_data[key])
-                                else:
-                                    # Show only one tone for toned emojis
-                                    if settings["toned"] == 0 or settings["lowend"] == True:
-                                        # Untoned emojis are already shown by default, so do nothing
-                                        # When using lowend mode, untoned emojis are enforced
-                                        pass
-                                    else:
-                                        desired_tone = settings["toned"]
-                                        current_tone = re.search("\d",sorted_data[key]["name"]).group(0)
-                                        if desired_tone == int(current_tone):
-                                            # Replace item with desired tone
-                                            toned_key = key
-                                            chars = sorted_data[key]["unicode"].split("-") # FIXME this can be multibyte so taking the first byt isn't right
-                                            untoned_code = chars[0]
-                                            for k in sorted_data:
-                                                if sorted_data[k]["unicode"] == untoned_code:
-                                                    key = k
-                                            # Replace image in item
-                                            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(directory + "/assets/svg/" + sorted_data[toned_key]["unicode"] + ".svg", iconsizes[1], iconsizes[2])
-                                            img = Gtk.Image.new_from_pixbuf(pixbuf)
-                                            GLib.idle_add(items[sorted_data[key]["unicode"]].set_image, img)
-                                            # Replace action
-                                            items[sorted_data[key]["unicode"]].disconnect(signals[key])
-                                            signals[key] = items[sorted_data[key]["unicode"]].connect("activate", item_response, sorted_data[toned_key])
-                                    
+        
+        # Add every single emoji to menu
+        for key, emoji in enumerate(sorted_data):
+            emoji_group = str(emoji["group"])
+            emoji_subgroup = str(emoji["subgroup"])
+            
+            emoji = fix_emoji_hexcode(emoji)
+            
+            group_name = groups_data["groups"][emoji_group]
+            group_key = '0-' + group_name
+            if group_key not in group_items:
+                # First emoji of this group, build the group
+                item = build_emoji_item(emoji, group_name.replace('-', ' & '))
+                submenu = build_group_menu(item)
+                group_items[group_key] = item
+                group_menus[group_key] = submenu
+            
+            subgroup_name = groups_data["subgroups"][emoji_subgroup]
+            subgroup_name = replace_subgroup_name(subgroup_name)
+            subgroup_key = group_key + '-' + subgroup_name
+            if subgroup_key not in group_items:
+                # First emoji of this subgroup, build the subgroup
+                
+                # Some subgroups are composed of two keywords, group them by the first one in parentgroup
+                subgroups = subgroup_name.split('-')
+                if len(subgroups) > 1: # TODO: implement setting
+                    parentgroup_name = subgroups[0]
+                    parentgroup_key = group_key + '-' + parentgroup_name
+                    if parentgroup_key not in group_items:
+                        # First emoji of this parentgroup, build the parentgroup
+                        parentgroup_item = build_emoji_item(emoji, parentgroup_name)
+                        parentgroup_submenu = build_group_menu(parentgroup_item)
+                        GLib.idle_add(group_menus[group_key].append, parentgroup_item)
+                        group_items[parentgroup_key] = parentgroup_item
+                        group_menus[parentgroup_key] = parentgroup_submenu
+                    
+                    subgroup_name = subgroups[1]
+                    item = build_emoji_item(emoji, subgroup_name)
+                    submenu = build_group_menu(item)
+                    GLib.idle_add(group_menus[parentgroup_key].append, item)
+                else:
+                    item = build_emoji_item(emoji, subgroup_name)
+                    submenu = build_group_menu(item)
+                    GLib.idle_add(group_menus[group_key].append, item)
+				
+                group_items[subgroup_key] = item
+                group_menus[subgroup_key] = submenu
+            
+            # Check if emoji is part of a custom subgroup
+            if emoji["hexcode"].lower() in subgroups_data["grouped_emojis"]: #TODO: implement setting
+                parentgroup_index = str(subgroups_data["grouped_emojis"][emoji["hexcode"].lower()])
+                parentgroup_name = subgroups_data["groups"][parentgroup_index]
+                parentgroup_key = parentgroup_name + "-c"
+                if parentgroup_key not in group_items:
+                    parentgroup_item = build_emoji_item(emoji, parentgroup_name)
+                    parentgroup_submenu = build_group_menu(parentgroup_item)
+                    GLib.idle_add(group_menus[subgroup_key].append, parentgroup_item)
+                    group_items[parentgroup_key] = parentgroup_item
+                    group_menus[parentgroup_key] = parentgroup_submenu
+                subgroup_key = parentgroup_key
+            
+            if "skins" not in emoji:
+                # No skinned emoji, simply add it
+                item = build_emoji_item(emoji)
+                GLib.idle_add(group_menus[subgroup_key].append, item)
+                signals[key] = item.connect("activate", item_response, emoji)
+                
+            else:
+                # This emoji presents different skins, check for setting to see what to do
+                if settings["toned"] == -1:
+                    # Show all toned emojis in a submenu
+                    item = build_emoji_item(emoji)
+                    GLib.idle_add(group_menus[subgroup_key].append, item)
+                    skin_submenu = build_group_menu(item)
+                
+                    # First, add the emoji without skin as subitem
+                    item = build_emoji_item(emoji)
+                    GLib.idle_add(skin_submenu.append, item)
+                    # Then, add every skin a subitem
+                    for skin in emoji["skins"]:
+                        skin = fix_emoji_hexcode(skin)
+                        skin_item = build_emoji_item(skin)
+                        GLib.idle_add(skin_submenu.append, skin_item)
+                        signals[key] = skin_item.connect("activate", item_response, skin)
+                elif settings["toned"] == 0:
+                    # Show only emoji without skin
+                    item = build_emoji_item(emoji)
+                    GLib.idle_add(group_menus[subgroup_key].append, item)
+                    signals[key] = item.connect("activate", item_response, emoji)
+                else:
+                    # Show only emoji with selected skin type
+                    for skin in emoji["skins"]:
+                        if skin["tone"] == settings["toned"]:
+                            skin = fix_emoji_hexcode(skin)
+                            item = build_emoji_item(skin, get_emoji_name(emoji))
+                            GLib.idle_add(group_menus[subgroup_key].append, item)
+                            signals[key] = item.connect("activate", item_response, skin)
+                            break
+            
         # Load icons into recent category
+        pixbuf = get_icon_pixbuf(directory + "/assets/categories/recent.svg")
+        img = Gtk.Image.new_from_pixbuf(pixbuf)
+        recent_item = build_menu_item("Recent", img)
+        recent_menu = build_group_menu(recent_item)
         recent_items = []
         for i in range (0, settings["recent"]):
-            recent_items.append( Gtk.ImageMenuItem())
+            recent_items.append(Gtk.ImageMenuItem())
             item_settings = recent_items[i].get_settings()
             item_settings.set_property('gtk-menu-images', True)
-            category_menu["recent"].append(recent_items[i])
+            GLib.idle_add(recent_menu.append, recent_items[i])
         refresh_recent_submenu()
+        GLib.idle_add(menu.append, recent_item)
+        
+        # Create separator
+        separator = Gtk.SeparatorMenuItem()
+        GLib.idle_add(menu.append,separator)
+        GLib.idle_add(separator.show)
 
         # Append categories to main menu
-        for category in categories:
-            GLib.idle_add(menu.append, category_item[category])
-            GLib.idle_add(category_item[category].show)
+        for key in sorted(groups_data["groups"]):
+            value = groups_data["groups"][key]
+            GLib.idle_add(menu.append, group_items['0-' + value])
+            GLib.idle_add(group_items['0-' + value].show)
+            #TODO: add subgroups here ?! to support name sorting too
 
-        # Create separator
+        # Create another separator
         separator = Gtk.SeparatorMenuItem()
         GLib.idle_add(menu.append,separator)
         GLib.idle_add(separator.show)
@@ -564,7 +625,7 @@ if __name__ == "__main__":
             sock.listen(1)
             GLib.io_add_watch(sock, GLib.IO_IN, handle_sock_signal)
         except:
-            print 'Could not listen to socket!'
+            print ('Could not listen to socket!')
 
         # Run server
         signal.signal(signal.SIGINT, signal.SIG_DFL)
