@@ -132,7 +132,7 @@ def open_search_window(self, w):
         for i in sorted_recent:
             emoji_name = sorted_recent[i]["name"]
             emoji_image = get_emoji_pixbuf(sorted_recent[i], 24)
-            emoji_code = sorted_recent[i]["unicode"]
+            emoji_code = sorted_recent[i]["hexcode"]
             iconstore.append([emoji_image, emoji_code, emoji_name])
             searchresults = []
         for i in sorted_recent.keys():
@@ -152,9 +152,9 @@ class SearchHandler:
             # No search? Put recent icons
             global sorted_recent
             for i in sorted_recent:
-                emoji_name = sorted_recent[i]["name"]
+                emoji_name = sorted_recent[i]["name"].title()
                 emoji_image = get_emoji_pixbuf(sorted_recent[i], 24)
-                emoji_code = sorted_recent[i]["unicode"]
+                emoji_code = sorted_recent[i]["hexcode"]
                 iconstore.append([emoji_image, emoji_code, emoji_name])
             searchresults = []
             for i in sorted_recent.keys():
@@ -162,21 +162,30 @@ class SearchHandler:
             return
         numfound=0
         searchresults = []
-        for i in sorted_data:
+        search = search.lower()
+        for emoji in sorted_data:
             match = False
-            for keyword in sorted_data[i]["keywords"]:
-                if keyword.find(search)>-1:
+            if "tags" in emoji:
+                for tag in emoji["tags"]:
+                    if tag.lower().find(search)>-1:
+                        match = True
+            if "annotation" in emoji:
+                if emoji["annotation"].lower().find(search)>-1:
                     match = True
-            if sorted_data[i]["name"].find(search)>-1:
+            if "shortcodes" in emoji:
+                for shortcode in emoji["shortcodes"]:
+                    if shortcode.find(search)>-1:
+                        match = True
+            if emoji["name"].lower().find(search)>-1:
                 match = True
             if match == True:
                 numfound += 1
                 if numfound > 50:
                     return
-                searchresults.append(sorted_data[i])
-                emoji_name = sorted_data[i]["name"]
-                emoji_image = get_emoji_pixbuf(sorted_data[i], 24)
-                emoji_code = sorted_data[i]["unicode"]
+                searchresults.append(emoji)
+                emoji_name = emoji["name"].title()
+                emoji_image = get_emoji_pixbuf(emoji, 24)
+                emoji_code = emoji["hexcode"]
                 iconstore.append([emoji_image, emoji_code, emoji_name])
     def onIconActivated(self, icon, index):
         global searchresults
@@ -626,7 +635,7 @@ if __name__ == "__main__":
             GLib.io_add_watch(sock, GLib.IO_IN, handle_sock_signal)
         except:
             print ('Could not listen to socket!')
-
+        
         # Run server
         signal.signal(signal.SIGINT, signal.SIG_DFL)
         Gtk.main()
