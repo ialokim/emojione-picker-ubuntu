@@ -357,6 +357,10 @@ def get_emoji_icon(emoji):
 def get_emoji_pixbuf(emoji, size = None):
     return get_icon_pixbuf(get_emoji_icon(emoji))
     
+def get_emoji_img(emoji, size = None):
+    pixbuf = get_emoji_pixbuf(emoji, size)
+    return Gtk.Image.new_from_pixbuf(pixbuf)
+    
 def fix_emoji_hexcode(emoji):
     hexcodes = emoji["hexcode"].split('-')
     if len(hexcodes) > 1:
@@ -378,19 +382,27 @@ def build_emoji_item(emoji, name = None):
 		name = get_emoji_name(emoji)
     
     try:
-        pixbuf = get_emoji_pixbuf(emoji)
-        img = Gtk.Image.new_from_pixbuf(pixbuf)
+        img = get_emoji_img(emoji)
     except:
         img = Gtk.Image()
         print ("Icon for '%s' could not be found: %s" % (name, emoji["hexcode"]))
     
     return build_menu_item(name, img)
 
-def build_menu_item(name, img):
-    item = Gtk.ImageMenuItem(name.title())
+def set_image(item, img):
+    if type(item) is not Gtk.ImageMenuItem:
+        return
     item_settings = item.get_settings()
     item_settings.set_property('gtk-menu-images', True)
     GLib.idle_add(item.set_image, img)
+
+def build_menu_item(name, img=False):
+    if img is False:
+        item = Gtk.MenuItem(name.title())
+    else:
+        item = Gtk.ImageMenuItem(name.title())
+        if img is not True: #actual img given
+            set_image(item, img)
     GLib.idle_add(item.show)
     return item
     
@@ -465,9 +477,70 @@ if __name__ == "__main__":
 
         # Load icons into menu items
         group_items = {}
+        group_images = {}
         group_menus = {}
+        group_menu_items = {}
         signals = {}
         
+        # Build group menus
+        for key in groups_data["groups"]:
+            group_name = groups_data["groups"][key]
+            group_key = group_name
+            item = build_menu_item(group_name.replace('-', ' & '), True)
+            submenu = build_group_menu(item)
+            group_items[group_key] = item
+            group_menus[group_key] = submenu
+            group_menu_items[group_key] = []
+            
+            # Build subgroup menus
+            for key2 in groups_data["hierarchy"][key]:
+                subgroup_name = groups_data["subgroups"][str(key2)]
+                subgroup_name = replace_subgroup_name(subgroup_name)
+                subgroup_key = group_key + '-' + subgroup_name
+                
+                if subgroup_key in group_items:
+                    # special case when merging two groups into one using replace_subgroup_name
+                    continue
+                
+                # Some subgroups are composed of two keywords, group them by the first one in parentgroup
+                subgroups = subgroup_name.split('-')
+                if len(subgroups) > 1: # TODO: implement setting
+                    parentgroup_name = subgroups[0]
+                    parentgroup_key = group_key + '-' + parentgroup_name
+                    if parentgroup_key not in group_items:
+                        parentgroup_item = build_menu_item(parentgroup_name, True)
+                        parentgroup_submenu = build_group_menu(parentgroup_item)
+                        group_menu_items[group_key].append(parentgroup_item)
+                        group_items[parentgroup_key] = parentgroup_item
+                        group_menus[parentgroup_key] = parentgroup_submenu
+                        group_menu_items[parentgroup_key] = []
+                        
+                    
+                    subgroup_name = subgroups[1]
+                    item = build_menu_item(subgroup_name, True)
+                    submenu = build_group_menu(item)
+                    group_menu_items[parentgroup_key].append(item)
+                else:
+                    item = build_menu_item(subgroup_name, True)
+                    submenu = build_group_menu(item)
+                    group_menu_items[group_key].append(item)
+				
+                group_items[subgroup_key] = item
+                group_menus[subgroup_key] = submenu
+                group_menu_items[subgroup_key] = []
+                
+                # Build custom subgroups menus
+                if str(key2) in subgroups_data["hierarchy"]:
+                    for key3 in subgroups_data["hierarchy"][str(key2)]:
+                        parentgroup_name = subgroups_data["groups"][str(key3)]
+                        parentgroup_key = subgroup_key + "-" + parentgroup_name + "-c"
+                        parentgroup_item = build_menu_item(parentgroup_name, True)
+                        parentgroup_submenu = build_group_menu(parentgroup_item)
+                        group_menu_items[subgroup_key].append(parentgroup_item)
+                        group_items[parentgroup_key] = parentgroup_item
+                        group_menus[parentgroup_key] = parentgroup_submenu
+                        group_menu_items[parentgroup_key] = []
+                        
         # Add every single emoji to menu
         for key, emoji in enumerate(sorted_data):
             emoji_group = str(emoji["group"])
@@ -476,62 +549,60 @@ if __name__ == "__main__":
             emoji = fix_emoji_hexcode(emoji)
             
             group_name = groups_data["groups"][emoji_group]
-            group_key = '0-' + group_name
+            group_key = group_name
             if group_key not in group_items:
-                # First emoji of this group, build the group
-                item = build_emoji_item(emoji, group_name.replace('-', ' & '))
-                submenu = build_group_menu(item)
-                group_items[group_key] = item
-                group_menus[group_key] = submenu
+                print("FAIL")
+            
+            if group_key not in group_images:
+                # First emoji of this group, set the group image
+                group_images[group_key] = get_emoji_img(emoji)
             
             subgroup_name = groups_data["subgroups"][emoji_subgroup]
             subgroup_name = replace_subgroup_name(subgroup_name)
             subgroup_key = group_key + '-' + subgroup_name
-            if subgroup_key not in group_items:
-                # First emoji of this subgroup, build the subgroup
-                
-                # Some subgroups are composed of two keywords, group them by the first one in parentgroup
+            if subgroup_key not in group_images:
+                # First emoji of this subgroup, set the subgroup image
+                group_images[subgroup_key] = get_emoji_img(emoji)
                 subgroups = subgroup_name.split('-')
                 if len(subgroups) > 1: # TODO: implement setting
                     parentgroup_name = subgroups[0]
                     parentgroup_key = group_key + '-' + parentgroup_name
-                    if parentgroup_key not in group_items:
-                        # First emoji of this parentgroup, build the parentgroup
-                        parentgroup_item = build_emoji_item(emoji, parentgroup_name)
-                        parentgroup_submenu = build_group_menu(parentgroup_item)
-                        GLib.idle_add(group_menus[group_key].append, parentgroup_item)
-                        group_items[parentgroup_key] = parentgroup_item
-                        group_menus[parentgroup_key] = parentgroup_submenu
-                    
-                    subgroup_name = subgroups[1]
-                    item = build_emoji_item(emoji, subgroup_name)
-                    submenu = build_group_menu(item)
-                    GLib.idle_add(group_menus[parentgroup_key].append, item)
+                    if parentgroup_key not in group_images:
+                        # First emoji of this parentgroup, set the parentgroup image
+                        group_images[parentgroup_key] = get_emoji_img(emoji)
+                
+            
+            # Check if emoji is a flag, then apply special treatment
+            if subgroup_name == 'country':
+                first_letter = get_emoji_name(emoji)[0]
+                if first_letter < 'F':
+                    parentgroup_name = subgroups_data["groups"][str(100)]
+                elif first_letter < 'M':
+                    parentgroup_name = subgroups_data["groups"][str(101)]
+                elif first_letter < 'S':
+                    parentgroup_name = subgroups_data["groups"][str(102)]
                 else:
-                    item = build_emoji_item(emoji, subgroup_name)
-                    submenu = build_group_menu(item)
-                    GLib.idle_add(group_menus[group_key].append, item)
-				
-                group_items[subgroup_key] = item
-                group_menus[subgroup_key] = submenu
+                    parentgroup_name = subgroups_data["groups"][str(103)]
+                parentgroup_key = subgroup_key + "-" + parentgroup_name + "-c"
+                if parentgroup_key not in group_images:
+                    # First emoji of this custom subgroup, set the custom subgroup image
+                    group_images[parentgroup_key] = get_emoji_img(emoji)
+                subgroup_key = parentgroup_key
             
             # Check if emoji is part of a custom subgroup
-            if emoji["hexcode"].lower() in subgroups_data["grouped_emojis"]: #TODO: implement setting
-                parentgroup_index = str(subgroups_data["grouped_emojis"][emoji["hexcode"].lower()])
-                parentgroup_name = subgroups_data["groups"][parentgroup_index]
-                parentgroup_key = parentgroup_name + "-c"
-                if parentgroup_key not in group_items:
-                    parentgroup_item = build_emoji_item(emoji, parentgroup_name)
-                    parentgroup_submenu = build_group_menu(parentgroup_item)
-                    GLib.idle_add(group_menus[subgroup_key].append, parentgroup_item)
-                    group_items[parentgroup_key] = parentgroup_item
-                    group_menus[parentgroup_key] = parentgroup_submenu
+            elif emoji["hexcode"].lower() in subgroups_data["grouped_emojis"]: #TODO: implement setting
+                parentgroup_index = subgroups_data["grouped_emojis"][emoji["hexcode"].lower()]
+                parentgroup_name = subgroups_data["groups"][str(parentgroup_index)]
+                parentgroup_key = subgroup_key + "-" + parentgroup_name + "-c"
+                if parentgroup_key not in group_images:
+                    # First emoji of this custom subgroup, set the custom subgroup image
+                    group_images[parentgroup_key] = get_emoji_img(emoji)
                 subgroup_key = parentgroup_key
             
             if "skins" not in emoji:
                 # No skinned emoji, simply add it
                 item = build_emoji_item(emoji)
-                GLib.idle_add(group_menus[subgroup_key].append, item)
+                group_menu_items[subgroup_key].append(item)
                 signals[key] = item.connect("activate", item_response, emoji)
                 
             else:
@@ -539,7 +610,7 @@ if __name__ == "__main__":
                 if settings["toned"] == -1:
                     # Show all toned emojis in a submenu
                     item = build_emoji_item(emoji)
-                    GLib.idle_add(group_menus[subgroup_key].append, item)
+                    group_menu_items[subgroup_key].append(item)
                     skin_submenu = build_group_menu(item)
                 
                     # First, add the emoji without skin as subitem
@@ -554,7 +625,7 @@ if __name__ == "__main__":
                 elif settings["toned"] == 0:
                     # Show only emoji without skin
                     item = build_emoji_item(emoji)
-                    GLib.idle_add(group_menus[subgroup_key].append, item)
+                    group_menu_items[subgroup_key].append(item)
                     signals[key] = item.connect("activate", item_response, emoji)
                 else:
                     # Show only emoji with selected skin type
@@ -562,9 +633,22 @@ if __name__ == "__main__":
                         if skin["tone"] == settings["toned"]:
                             skin = fix_emoji_hexcode(skin)
                             item = build_emoji_item(skin, get_emoji_name(emoji))
-                            GLib.idle_add(group_menus[subgroup_key].append, item)
+                            group_menu_items[subgroup_key].append(item)
                             signals[key] = item.connect("activate", item_response, skin)
                             break
+                            
+        for group_key in group_items:
+            if group_key in group_images:
+                set_image(group_items[group_key], group_images[group_key])
+            else:
+                print(group_key)
+            
+            def orderfunc(d):
+                # only order countries
+                if group_key.startswith('flags-country-countries'):
+                    return d.get_label()
+            for item in sorted(group_menu_items[group_key], key=orderfunc):  # TODO: name sorting setting
+                GLib.idle_add(group_menus[group_key].append, item)
             
         # Load icons into recent category
         pixbuf = get_icon_pixbuf(directory + "/assets/categories/recent.svg")
@@ -587,10 +671,9 @@ if __name__ == "__main__":
 
         # Append categories to main menu
         for key in sorted(groups_data["groups"]):
-            value = groups_data["groups"][key]
-            GLib.idle_add(menu.append, group_items['0-' + value])
-            GLib.idle_add(group_items['0-' + value].show)
-            #TODO: add subgroups here ?! to support name sorting too
+            group_key = groups_data["groups"][key]
+            GLib.idle_add(menu.append, group_items[group_key])
+            GLib.idle_add(group_items[group_key].show)
 
         # Create another separator
         separator = Gtk.SeparatorMenuItem()
