@@ -195,13 +195,16 @@ class SearchHandler:
         global selectionChanged
         selectionChanged = True
     def onKeyReleased(self, window, event):
-        global selectionChanged
+        global selectionChanged, searchresults
         if event.keyval == Gdk.KEY_Escape:
             window.hide()
         elif event.keyval == Gdk.KEY_Down:
             searchbuilder.get_object("iconview").grab_focus()
         elif event.keyval == Gdk.KEY_Up and selectionChanged == False:
             searchbuilder.get_object("search").grab_focus()
+        elif event.keyval == Gdk.KEY_Return:
+            item_response(self, searchresults[0])
+            window.hide()
         selectionChanged = False
     def onOutFocus(self, window, data):
         window.hide()
