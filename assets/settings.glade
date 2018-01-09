@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
+<!-- Generated with glade 3.20.0 -->
 <interface>
   <requires lib="gtk+" version="3.8"/>
   <object class="GtkAdjustment" id="adjustment1">
@@ -160,7 +160,7 @@
             </child>
             <child>
               <object class="GtkCheckButton" id="check_paste">
-                <property name="label" translatable="yes">Write emoji instead of using clipboard [Experimental]</property>
+                <property name="label" translatable="yes">Paste emoji automatically from clipboard [Experimental]</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
@@ -206,6 +206,40 @@ Untoned emojis will be enforced.</property>
                 <property name="expand">False</property>
                 <property name="fill">True</property>
                 <property name="position">4</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkCheckButton" id="check_namesort">
+                <property name="label" translatable="yes">Sort Emojis by name</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">False</property>
+                <property name="tooltip_text" translatable="yes">A smaller subset of emojis will be shown.
+Untoned emojis will be enforced.</property>
+                <property name="xalign">0</property>
+                <property name="draw_indicator">True</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">5</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkCheckButton" id="check_subgroups">
+                <property name="label" translatable="yes">Show more submenus</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">False</property>
+                <property name="tooltip_text" translatable="yes">A smaller subset of emojis will be shown.
+Untoned emojis will be enforced.</property>
+                <property name="xalign">0</property>
+                <property name="draw_indicator">True</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">6</property>
               </packing>
             </child>
           </object>

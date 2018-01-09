@@ -41,7 +41,9 @@ default_settings = settings = {
     "notifications": True,
     "lowend": False,
     "recent": 20,
-    "paste": False
+    "paste": False,
+    "subgroups": True,
+    "namesort": False
 }
 configpath = expanduser("~") + "/.config/emojione-picker-dev"
 os.path.isdir(configpath) or os.mkdir(configpath)
@@ -59,6 +61,7 @@ def handle_sock_signal(sock, *args):
 def exit(self, w):
     sys.exit()
 
+# Settings
 def open_settings_window(self, w):
     global settings
     builder.add_from_file(directory + "/assets/settings.glade")
@@ -73,6 +76,8 @@ def open_settings_window(self, w):
     builder.get_object("check_lowend").set_active(settings["lowend"])
     builder.get_object("recent").set_value(settings["recent"])
     builder.get_object("check_paste").set_active(settings["paste"])
+    builder.get_object("check_namesort").set_active(settings["namesort"])
+    builder.get_object("check_subgroups").set_active(settings["subgroups"])
 
 class SettingsButtonHandler:
     def onButtonPressed(self, button):
@@ -92,7 +97,9 @@ def apply_settings():
         "notifications": builder.get_object("check_notifications").get_active(),
         "lowend": builder.get_object("check_lowend").get_active(),
         "recent": builder.get_object("recent").get_value_as_int(),
-        "paste": builder.get_object("check_paste").get_active()
+        "paste": builder.get_object("check_paste").get_active(),
+        "subgroups": builder.get_object("check_subgroups").get_active(),
+        "namesort": builder.get_object("check_namesort").get_active()
     }
     # Save settings to file
     save_settings()
@@ -105,7 +112,8 @@ def save_settings():
     with open(configfile, 'w') as outfile:
         json.dump(settings, outfile)
 
-# Search feature
+# Search
+
 searchbuilder = None
 search_window = None
 def open_search_window(self, w):
@@ -116,15 +124,13 @@ def open_search_window(self, w):
         search_window.show_all()
         search_window.present()
         search_window.grab_focus()
+        search_window.set_modal(True)
     except:
         # Build window
         searchbuilder = Gtk.Builder()
         searchbuilder.add_from_file(directory + "/assets/chooser.glade")
         searchbuilder.connect_signals(SearchHandler())
         search_window = searchbuilder.get_object("search_window")
-        search_window.show_all()
-        search_window.present()
-        search_window.grab_focus()
 
         # Put recent icons by default
         iconstore = searchbuilder.get_object("iconstore")
@@ -137,6 +143,10 @@ def open_search_window(self, w):
             searchresults = []
         for i in sorted_recent.keys():
             searchresults.append(sorted_recent[i])
+            
+        search_window.show_all()
+        search_window.present()
+        search_window.grab_focus()
 
     return
 
@@ -386,7 +396,7 @@ def get_icon_pixbuf(path, size = None):
 
 def build_emoji_item(emoji, name = None):
     if name is None:
-		name = get_emoji_name(emoji)
+        name = get_emoji_name(emoji)
     
     try:
         img = get_emoji_img(emoji)
@@ -416,7 +426,9 @@ def build_menu_item(name, img=False):
 
 def build_group_menu(item):
     menu = Gtk.Menu()
-    GLib.idle_add(item.set_submenu, menu)
+    # TODO: this could be removed, if items would not be stored directly in dicts
+    #GLib.idle_add(item.set_submenu, menu)
+    item.set_submenu(menu)
     return menu
     
 def replace_subgroup_name(subgroup_name):
@@ -483,11 +495,13 @@ if __name__ == "__main__":
             subgroups_data = json.load(subgroups_file)
 
         # Load icons into menu items
+        # TODO: what about building the actual items afterwards,
+        #       and only storing objects inside dicts
         group_items = {}
         group_images = {}
         group_menus = {}
         group_menu_items = {}
-        signals = {}
+        signals = {} # TODO: necessary?!
         
         # Build group menus
         for key in groups_data["groups"]:
@@ -511,7 +525,8 @@ if __name__ == "__main__":
                 
                 # Some subgroups are composed of two keywords, group them by the first one in parentgroup
                 subgroups = subgroup_name.split('-')
-                if len(subgroups) > 1: # TODO: implement setting
+                if settings["subgroups"] is True \
+                and len(subgroups) > 1: # TODO: implement setting
                     parentgroup_name = subgroups[0]
                     parentgroup_key = group_key + '-' + parentgroup_name
                     if parentgroup_key not in group_items:
@@ -528,16 +543,17 @@ if __name__ == "__main__":
                     submenu = build_group_menu(item)
                     group_menu_items[parentgroup_key].append(item)
                 else:
-                    item = build_menu_item(subgroup_name, True)
+                    item = build_menu_item(subgroup_name.replace('-', ': '), True)
                     submenu = build_group_menu(item)
                     group_menu_items[group_key].append(item)
-				
+                
                 group_items[subgroup_key] = item
                 group_menus[subgroup_key] = submenu
                 group_menu_items[subgroup_key] = []
                 
                 # Build custom subgroups menus
-                if str(key2) in subgroups_data["hierarchy"]:
+                if settings["subgroups"] is True \
+                and str(key2) in subgroups_data["hierarchy"]:
                     for key3 in subgroups_data["hierarchy"][str(key2)]:
                         parentgroup_name = subgroups_data["groups"][str(key3)]
                         parentgroup_key = subgroup_key + "-" + parentgroup_name + "-c"
@@ -571,40 +587,41 @@ if __name__ == "__main__":
                 # First emoji of this subgroup, set the subgroup image
                 group_images[subgroup_key] = get_emoji_img(emoji)
                 subgroups = subgroup_name.split('-')
-                if len(subgroups) > 1: # TODO: implement setting
+                if settings["subgroups"] is True \
+                and len(subgroups) > 1: # TODO: implement setting
                     parentgroup_name = subgroups[0]
                     parentgroup_key = group_key + '-' + parentgroup_name
                     if parentgroup_key not in group_images:
                         # First emoji of this parentgroup, set the parentgroup image
                         group_images[parentgroup_key] = get_emoji_img(emoji)
                 
-            
-            # Check if emoji is a flag, then apply special treatment
-            if subgroup_name == 'country':
-                first_letter = get_emoji_name(emoji)[0]
-                if first_letter < 'F':
-                    parentgroup_name = subgroups_data["groups"][str(100)]
-                elif first_letter < 'M':
-                    parentgroup_name = subgroups_data["groups"][str(101)]
-                elif first_letter < 'S':
-                    parentgroup_name = subgroups_data["groups"][str(102)]
-                else:
-                    parentgroup_name = subgroups_data["groups"][str(103)]
-                parentgroup_key = subgroup_key + "-" + parentgroup_name + "-c"
-                if parentgroup_key not in group_images:
-                    # First emoji of this custom subgroup, set the custom subgroup image
-                    group_images[parentgroup_key] = get_emoji_img(emoji)
-                subgroup_key = parentgroup_key
-            
-            # Check if emoji is part of a custom subgroup
-            elif emoji["hexcode"].lower() in subgroups_data["grouped_emojis"]: #TODO: implement setting
-                parentgroup_index = subgroups_data["grouped_emojis"][emoji["hexcode"].lower()]
-                parentgroup_name = subgroups_data["groups"][str(parentgroup_index)]
-                parentgroup_key = subgroup_key + "-" + parentgroup_name + "-c"
-                if parentgroup_key not in group_images:
-                    # First emoji of this custom subgroup, set the custom subgroup image
-                    group_images[parentgroup_key] = get_emoji_img(emoji)
-                subgroup_key = parentgroup_key
+            if settings["subgroups"] is True:
+                # Check if emoji is a flag, then apply special treatment
+                if subgroup_name == 'country':
+                    first_letter = get_emoji_name(emoji)[0]
+                    if first_letter < 'F':
+                        parentgroup_name = subgroups_data["groups"][str(100)]
+                    elif first_letter < 'M':
+                        parentgroup_name = subgroups_data["groups"][str(101)]
+                    elif first_letter < 'S':
+                        parentgroup_name = subgroups_data["groups"][str(102)]
+                    else:
+                        parentgroup_name = subgroups_data["groups"][str(103)]
+                    parentgroup_key = subgroup_key + "-" + parentgroup_name + "-c"
+                    if parentgroup_key not in group_images:
+                        # First emoji of this custom subgroup, set the custom subgroup image
+                        group_images[parentgroup_key] = get_emoji_img(emoji)
+                    subgroup_key = parentgroup_key
+                
+                # Check if emoji is part of a custom subgroup
+                elif emoji["hexcode"].lower() in subgroups_data["grouped_emojis"]:
+                    parentgroup_index = subgroups_data["grouped_emojis"][emoji["hexcode"].lower()]
+                    parentgroup_name = subgroups_data["groups"][str(parentgroup_index)]
+                    parentgroup_key = subgroup_key + "-" + parentgroup_name + "-c"
+                    if parentgroup_key not in group_images:
+                        # First emoji of this custom subgroup, set the custom subgroup image
+                        group_images[parentgroup_key] = get_emoji_img(emoji)
+                    subgroup_key = parentgroup_key
             
             if "skins" not in emoji:
                 # No skinned emoji, simply add it
@@ -651,11 +668,23 @@ if __name__ == "__main__":
                 print(group_key)
             
             def orderfunc(d):
-                # only order countries
-                if group_key.startswith('flags-country-countries'):
-                    return d.get_label() # TODO: with get_submenu() for name sorting setting
+                # order all items by name (if namesort) or only order countries
+                if settings["namesort"] is True \
+                or group_key.startswith('flags-country-countries'): 
+                    if d.get_submenu() is not None:
+                        return d
+                    return d.get_label()
+            
+            last_menu = None        
+            
             for item in sorted(group_menu_items[group_key], key=orderfunc):
-                GLib.idle_add(group_menus[group_key].append, item) # TODO: add separator between submenus and actual emojis
+                current_menu = item.get_submenu() is not None
+                if last_menu is not None and current_menu != last_menu:
+                    separator = Gtk.SeparatorMenuItem()
+                    GLib.idle_add(group_menus[group_key].append, separator)
+                    GLib.idle_add(separator.show)
+                last_menu = current_menu
+                GLib.idle_add(group_menus[group_key].append, item)
             
         # Load icons into recent category
         pixbuf = get_icon_pixbuf(directory + "/assets/categories/recent.svg")
